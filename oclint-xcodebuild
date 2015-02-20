@@ -129,7 +129,7 @@ def read_directory(line):
     else:
         return ""
 
-def convert(input_file, output_file, is_excluded=None):
+def convert(input_file, output_file, is_excluded=None, is_file_excluded=None):
     json_input_mode = input_file.endswith('.json')
 
     find_compileC = re.compile("CompileC").search
@@ -140,6 +140,10 @@ def convert(input_file, output_file, is_excluded=None):
 
     if is_excluded is None:
         is_excluded = (lambda x: False)
+
+    if is_file_excluded is None:
+        is_file_excluded = (lambda x: False)
+
 
     with open(output_file, "w") as output:
         with open(input_file, "r") as input:
@@ -162,9 +166,10 @@ def convert(input_file, output_file, is_excluded=None):
                             if not find_clang_command(log_line):
                                 continue
                             output_record = process_clang_command(log_line, directory)
-                            output.write(cr)
-                            output.write(json.dumps(output_record, indent=2))
-                            cr = ",\n"
+                            if not is_file_excluded(output_record['file']):
+                                output.write(cr)
+                                output.write(json.dumps(output_record, indent=2))
+                                cr = ",\n"
                             break
                         continue
                     compilation_section_re = find_processPCH(log_line)
@@ -185,6 +190,7 @@ def convert(input_file, output_file, is_excluded=None):
 def main():
     arg_parser = argparse.ArgumentParser(description='Converts xcodebuild logs or xctool-json-reporter logs to compile_commands.json')
     arg_parser.add_argument("-e", "-exclude", dest="exclusion", help="Directory exclusion pattern (regular expression)")
+    arg_parser.add_argument("-f", "--exclude-file", dest="file_exclusion", help="File exclusion pattern (regular expression)")
     arg_parser.add_argument("-o", "-output", dest="output_file", help="Output json file (default: ./%s)" % JSON_COMPILATION_DATABASE)
     arg_parser.add_argument(metavar="FILE", nargs='?', dest="input_file", help="Input log file (default: ./%s)" % DEFAULT_INPUT_FILE)
 
@@ -209,7 +215,12 @@ def main():
     else:
         is_excluded = None
 
-    convert(input_file, output_file, is_excluded)
+    if args.file_exclusion:
+        is_file_excluded = re.compile(args.file_exclusion).match
+    else:
+        is_file_excluded = None
+
+    convert(input_file, output_file, is_excluded, is_file_excluded)
 
 
 if __name__ == '__main__':
